@@ -189,9 +189,9 @@ namespace GitUI
             HotkeysEnabled = true;
             Hotkeys = HotkeySettingsManager.LoadHotkeys(HotkeySettingsName);
 
-			SelectedDiff.AddContextMenuSeparator();
-			_StageSelectedHunksToolStripMenuItem = SelectedDiff.AddContextMenuEntry(_stageSelectedHunks.Text, StageSelectedCompleteChunksToolStripMenuItemClick);
-//			_StageSelectedHunksToolStripMenuItem.ShortcutKeyDisplayString = GetShortcutKeys((int)Commands.StageSelectedFile).ToShortcutKeyDisplayString();
+            SelectedDiff.AddContextMenuSeparator();
+            _StageSelectedHunksToolStripMenuItem = SelectedDiff.AddContextMenuEntry(_stageSelectedHunks.Text, StageSelectedCompleteChunksToolStripMenuItemClick);
+            _StageSelectedHunksToolStripMenuItem.ShortcutKeyDisplayString = GetShortcutKeys((int)Commands.StageSelectedFileHunk).ToShortcutKeyDisplayString();
 
             SelectedDiff.AddContextMenuSeparator();
             _StageSelectedLinesToolStripMenuItem = SelectedDiff.AddContextMenuEntry(_stageSelectedLines.Text, StageSelectedLinesToolStripMenuItemClick);
@@ -241,7 +241,9 @@ namespace GitUI
             FocusCommitMessage,
             ResetSelectedFiles,
             StageSelectedFile,
+            StageSelectedFileHunk,
             UnStageSelectedFile,
+            UnStageSelectedFileHunk,
             ToggleSelectionFilter
         }
 
@@ -342,6 +344,37 @@ namespace GitUI
             return false;
         }
 
+		private bool StageSelectedFileHunk()
+		{
+			if (Unstaged.Focused)
+			{
+				StageClick(this, null);
+				return true;
+			}
+			else if (SelectedDiff.ContainsFocus && !_currentItemStaged && _StageSelectedLinesToolStripMenuItem.Enabled)
+			{
+				StageSelectedCompleteChunksToolStripMenuItemClick(this, null);
+				return true;
+			}
+
+			return false;
+		}
+
+		private bool UnStageSelectedFileHunk()
+		{
+			if (Staged.Focused)
+			{
+				UnstageFilesClick(this, null);
+				return true;
+			}
+			else if (SelectedDiff.ContainsFocus && _currentItemStaged && _StageSelectedLinesToolStripMenuItem.Enabled)
+			{
+				StageSelectedCompleteChunksToolStripMenuItemClick(this, null);
+				return true;
+			}
+			return false;
+		}
+
         private bool ToggleSelectionFilter()
         {
             selectionFilterToolStripMenuItem.Checked = !selectionFilterToolStripMenuItem.Checked;
@@ -362,6 +395,8 @@ namespace GitUI
                 case Commands.ResetSelectedFiles: return ResetSelectedFiles();
                 case Commands.StageSelectedFile: return StageSelectedFile();
                 case Commands.UnStageSelectedFile: return UnStageSelectedFile();
+                case Commands.StageSelectedFileHunk: return StageSelectedFileHunk();
+                case Commands.UnStageSelectedFileHunk: return UnStageSelectedFileHunk();
                 case Commands.ToggleSelectionFilter: return ToggleSelectionFilter();
                 default: return base.ExecuteCommand(cmd);
             }
@@ -708,6 +743,9 @@ namespace GitUI
             }
 
             _StageSelectedHunksToolStripMenuItem.Text = staged ? _unstageSelectedHunks.Text : _stageSelectedHunks.Text;
+            _StageSelectedHunksToolStripMenuItem.Image = staged ? toolUnstageItem.Image : toolStageItem.Image;
+            _StageSelectedHunksToolStripMenuItem.ShortcutKeyDisplayString =
+                GetShortcutKeys((int)(staged ? Commands.UnStageSelectedFileHunk : Commands.StageSelectedFileHunk)).ToShortcutKeyDisplayString();
             _StageSelectedLinesToolStripMenuItem.Text = staged ? _unstageSelectedLines.Text : _stageSelectedLines.Text;
             _StageSelectedLinesToolStripMenuItem.Image = staged ? toolUnstageItem.Image : toolStageItem.Image;
             _StageSelectedLinesToolStripMenuItem.ShortcutKeyDisplayString = 
