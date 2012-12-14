@@ -83,6 +83,8 @@ namespace GitUI
         private readonly TranslationString _selectOnlyOneFile = new TranslationString("You must have only one file selected.");
         private readonly TranslationString _selectOnlyOneFileCaption = new TranslationString("Error");
 
+        private readonly TranslationString _stageSelectedHunks = new TranslationString("Stage selected hunk(s)");
+        private readonly TranslationString _unstageSelectedHunks = new TranslationString("Unstage selected hunk(s)");
         private readonly TranslationString _stageSelectedLines = new TranslationString("Stage selected line(s)");
         private readonly TranslationString _unstageSelectedLines = new TranslationString("Unstage selected line(s)");
         private readonly TranslationString _resetSelectedLines = new TranslationString("Reset selected line(s)");
@@ -115,6 +117,7 @@ namespace GitUI
         private readonly CommitKind _commitKind;
         private readonly GitRevision _editedCommit;
         private readonly ToolStripMenuItem _StageSelectedLinesToolStripMenuItem;
+        private readonly ToolStripMenuItem _StageSelectedHunksToolStripMenuItem;
         private readonly ToolStripMenuItem _ResetSelectedLinesToolStripMenuItem;
         private string commitTemplate;
         private bool IsMergeCommit { get; set; }
@@ -186,6 +189,10 @@ namespace GitUI
             HotkeysEnabled = true;
             Hotkeys = HotkeySettingsManager.LoadHotkeys(HotkeySettingsName);
 
+			SelectedDiff.AddContextMenuSeparator();
+			_StageSelectedHunksToolStripMenuItem = SelectedDiff.AddContextMenuEntry(_stageSelectedHunks.Text, StageSelectedCompleteChunksToolStripMenuItemClick);
+//			_StageSelectedHunksToolStripMenuItem.ShortcutKeyDisplayString = GetShortcutKeys((int)Commands.StageSelectedFile).ToShortcutKeyDisplayString();
+
             SelectedDiff.AddContextMenuSeparator();
             _StageSelectedLinesToolStripMenuItem = SelectedDiff.AddContextMenuEntry(_stageSelectedLines.Text, StageSelectedLinesToolStripMenuItemClick);
             _StageSelectedLinesToolStripMenuItem.ShortcutKeyDisplayString = GetShortcutKeys((int)Commands.StageSelectedFile).ToShortcutKeyDisplayString();
@@ -215,6 +222,7 @@ namespace GitUI
 
         void SelectedDiff_ContextMenuOpening(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            _StageSelectedHunksToolStripMenuItem.Enabled = SelectedDiff.HasAnyPatches() || _currentItem != null && _currentItem.IsNew;
             _StageSelectedLinesToolStripMenuItem.Enabled = SelectedDiff.HasAnyPatches() || _currentItem != null && _currentItem.IsNew;
             _ResetSelectedLinesToolStripMenuItem.Enabled = _StageSelectedLinesToolStripMenuItem.Enabled;
         }
@@ -438,6 +446,41 @@ namespace GitUI
                 RescanChanges();                
             }
         }
+
+		private void StageSelectedCompleteChunksToolStripMenuItemClick(object sender, EventArgs e)
+		{
+			//to prevent multiple clicks
+			if (!selectedDiffReloaded)
+				return;
+
+			Debug.Assert(_currentItem != null);
+			// Prepare git command
+			string args = "apply --cached --whitespace=nowarn";
+
+			if (_currentItemStaged) //staged
+				args += " --reverse";
+			byte[] patch;
+			if (!_currentItemStaged && _currentItem.IsNew)
+				patch = PatchManager.GetSelectedLinesAsNewPatch(Module, _currentItem.Name, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), SelectedDiff.Encoding, false);
+			else
+				patch = PatchManager.GetSelectedCompleteChunksAsPatch(Module, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), _currentItemStaged, SelectedDiff.Encoding, _currentItem.IsNew);
+
+			if (patch != null && patch.Length > 0)
+			{
+				string output = Module.RunGitCmd(args, patch);
+				if (!string.IsNullOrEmpty(output))
+				{
+					MessageBox.Show(this, output + "\n\n" + SelectedDiff.Encoding.GetString(patch));
+				}
+				if (_currentItemStaged)
+					Staged.StoreNextIndexToSelect();
+				else
+					Unstaged.StoreNextIndexToSelect();
+				ScheduleGoToLine();
+				selectedDiffReloaded = false;
+				RescanChanges();
+			}
+		}
 
         private void ScheduleGoToLine()
         {
@@ -664,6 +707,7 @@ namespace GitUI
                 llShowPreview.Show();
             }
 
+            _StageSelectedHunksToolStripMenuItem.Text = staged ? _unstageSelectedHunks.Text : _stageSelectedHunks.Text;
             _StageSelectedLinesToolStripMenuItem.Text = staged ? _unstageSelectedLines.Text : _stageSelectedLines.Text;
             _StageSelectedLinesToolStripMenuItem.Image = staged ? toolUnstageItem.Image : toolStageItem.Image;
             _StageSelectedLinesToolStripMenuItem.ShortcutKeyDisplayString = 

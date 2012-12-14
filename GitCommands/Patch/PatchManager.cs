@@ -63,6 +63,28 @@ namespace PatchApply
                 return GetPatchBytes(header, body, fileContentEncoding);
         }
 
+		public static byte[] GetSelectedCompleteChunksAsPatch(GitModule module, string text, int selectionPosition, int selectionLength, bool staged, Encoding fileContentEncoding, bool isNewFile)
+		{
+
+			string header;
+
+			ChunkList selectedChunks = ChunkList.GetSelectedCompleteChunks(text, selectionPosition, selectionLength, staged, out header);
+
+			if (selectedChunks == null)
+				return null;
+
+			//if file is new, --- /dev/null has to be replaced by --- a/fileName
+			if (isNewFile)
+				header = CorrectHeaderForNewFile(header);
+
+			string body = selectedChunks.ToStagePatch(staged);
+
+			if (header == null || body == null)
+				return null;
+			else
+				return GetPatchBytes(header, body, fileContentEncoding);
+		}
+
         private static string CorrectHeaderForNewFile(string header)
         {
             string[] headerLines = header.Split(new string[] {"\n"}, StringSplitOptions.RemoveEmptyEntries);
@@ -452,6 +474,65 @@ namespace PatchApply
             return result;
         }
 
+		public static Chunk ParseCompleteChunk(string chunkStr, int currentPos, int selectionPosition, int selectionLength)
+		{
+			string[] lines = chunkStr.Split('\n');
+			if (lines.Length < 2)
+				return null;
+
+			bool inPatch = true;
+			bool inPreContext = true;
+			int i = 1;
+
+			Chunk result = new Chunk();
+			result.ParseHeader(lines[0]);
+			currentPos += lines[0].Length + 1;
+
+			while (i < lines.Length)
+			{
+				string line = lines[i];
+				if (inPatch)
+				{
+					PatchLine patchLine = new PatchLine()
+					{
+						Text = line
+					};
+					//do not refactor, there are no break points condition in VS Experss
+//ahogg-temp					if (currentPos <= selectionPosition + selectionLength && currentPos + line.Length >= selectionPosition)
+						patchLine.Selected = true;
+
+					if (line.StartsWith(" "))
+						result.AddContextLine(patchLine, inPreContext);
+					else if (line.StartsWith("-"))
+					{
+						inPreContext = false;
+						result.AddDiffLine(patchLine, true);
+					}
+					else if (line.StartsWith("+"))
+					{
+						inPreContext = false;
+						result.AddDiffLine(patchLine, false);
+					}
+					else if (line.StartsWith("\\"))
+					{
+						if (line.Contains("No newline at end of file"))
+							if (result.CurrentSubChunk.AddedLines.Count > 0 && result.CurrentSubChunk.PostContext.Count == 0)
+								result.CurrentSubChunk.IsNoNewLineAtTheEnd = line;
+							else
+								result.CurrentSubChunk.WasNoNewLineAtTheEnd = line;
+					}
+					else
+						inPatch = false;
+
+				}
+
+				currentPos += line.Length + 1;
+				i++;
+			}
+
+			return result;
+		}
+
         public static Chunk FromNewFile(GitModule module, string fileText, int selectionPosition, int selectionLength, bool reset)
         {
             Chunk result = new Chunk();
@@ -562,6 +643,44 @@ namespace PatchApply
 
             return selectedChunks;
         }
+
+		public static ChunkList GetSelectedCompleteChunks(string text, int selectionPosition, int selectionLength, bool staged, out string header)
+		{
+			header = null;
+			//When there is no patch, return nothing
+			if (string.IsNullOrEmpty(text))
+				return null;
+
+			// Divide diff into header and patch
+			int patchPos = text.IndexOf("@@");
+			if (patchPos < 1)
+				return null;
+
+			header = text.Substring(0, patchPos);
+			string diff = text.Substring(patchPos - 1);
+
+			string[] chunks = diff.Split(new string[] { "\n@@" }, StringSplitOptions.RemoveEmptyEntries);
+			ChunkList selectedChunks = new ChunkList();
+			int i = 0;
+			int currentPos = patchPos - 1;
+
+			while (i < chunks.Length && currentPos <= selectionPosition + selectionLength)
+			{
+				string chunkStr = chunks[i];
+				currentPos += 3;
+				//if selection intersects with chunsk
+				if (currentPos + chunkStr.Length >= selectionPosition)
+				{
+					Chunk chunk = Chunk.ParseCompleteChunk(chunkStr, currentPos, selectionPosition, selectionLength);
+					if (chunk != null)
+						selectedChunks.Add(chunk);
+				}
+				currentPos += chunkStr.Length;
+				i++;
+			}
+
+			return selectedChunks;
+		}
 
         public static ChunkList FromNewFile(GitModule module, string text, int selectionPosition, int selectionLength, bool reset)
         {
