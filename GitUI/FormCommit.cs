@@ -83,12 +83,15 @@ namespace GitUI
         private readonly TranslationString _selectOnlyOneFile = new TranslationString("You must have only one file selected.");
         private readonly TranslationString _selectOnlyOneFileCaption = new TranslationString("Error");
 
-        private readonly TranslationString _stageSelectedHunks = new TranslationString("Stage selected hunk(s)");
-        private readonly TranslationString _unstageSelectedHunks = new TranslationString("Unstage selected hunk(s)");
         private readonly TranslationString _stageSelectedLines = new TranslationString("Stage selected line(s)");
         private readonly TranslationString _unstageSelectedLines = new TranslationString("Unstage selected line(s)");
         private readonly TranslationString _resetSelectedLines = new TranslationString("Reset selected line(s)");
         private readonly TranslationString _resetSelectedLinesConfirmation = new TranslationString("Are you sure you want to reset the changes to the selected lines?");
+
+        private readonly TranslationString _stageSelectedHunks = new TranslationString("Stage selected hunk(s)");
+        private readonly TranslationString _unstageSelectedHunks = new TranslationString("Unstage selected hunk(s)");
+        private readonly TranslationString _resetSelectedHunks = new TranslationString("Reset selected hunk(s)");
+        private readonly TranslationString _resetSelectedHunksConfirmation = new TranslationString("Are you sure you want to reset the changes to the selected hunks?");
 
         private readonly TranslationString _formTitle = new TranslationString("Commit to {0} ({1})");
 
@@ -447,7 +450,7 @@ namespace GitUI
 
         private bool selectedDiffReloaded = true;
 
-        private void StageSelectedLinesToolStripMenuItemClick(object sender, EventArgs e)
+        private void StageSelection(bool stageAsHunks)
         {
             //to prevent multiple clicks
             if (!selectedDiffReloaded)
@@ -463,7 +466,7 @@ namespace GitUI
             if (!_currentItemStaged && _currentItem.IsNew)
                 patch = PatchManager.GetSelectedLinesAsNewPatch(Module, _currentItem.Name, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), SelectedDiff.Encoding, false);
             else
-                patch = PatchManager.GetSelectedLinesAsPatch(Module, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), _currentItemStaged, SelectedDiff.Encoding, _currentItem.IsNew);
+                patch = PatchManager.GetSelectedLinesAsPatch(Module, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), _currentItemStaged, SelectedDiff.Encoding, _currentItem.IsNew, stageAsHunks);
 
             if (patch != null && patch.Length > 0)
             {
@@ -478,43 +481,18 @@ namespace GitUI
                     Unstaged.StoreNextIndexToSelect();
                 ScheduleGoToLine();
                 selectedDiffReloaded = false;
-                RescanChanges();                
+                RescanChanges();
             }
+        }
+
+        private void StageSelectedLinesToolStripMenuItemClick(object sender, EventArgs e)
+        {
+            StageSelection(false);
         }
 
 		private void StageSelectedCompleteChunksToolStripMenuItemClick(object sender, EventArgs e)
 		{
-			//to prevent multiple clicks
-			if (!selectedDiffReloaded)
-				return;
-
-			Debug.Assert(_currentItem != null);
-			// Prepare git command
-			string args = "apply --cached --whitespace=nowarn";
-
-			if (_currentItemStaged) //staged
-				args += " --reverse";
-			byte[] patch;
-			if (!_currentItemStaged && _currentItem.IsNew)
-				patch = PatchManager.GetSelectedLinesAsNewPatch(Module, _currentItem.Name, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), SelectedDiff.Encoding, false);
-			else
-				patch = PatchManager.GetSelectedCompleteChunksAsPatch(Module, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), _currentItemStaged, SelectedDiff.Encoding, _currentItem.IsNew);
-
-			if (patch != null && patch.Length > 0)
-			{
-				string output = Module.RunGitCmd(args, patch);
-				if (!string.IsNullOrEmpty(output))
-				{
-					MessageBox.Show(this, output + "\n\n" + SelectedDiff.Encoding.GetString(patch));
-				}
-				if (_currentItemStaged)
-					Staged.StoreNextIndexToSelect();
-				else
-					Unstaged.StoreNextIndexToSelect();
-				ScheduleGoToLine();
-				selectedDiffReloaded = false;
-				RescanChanges();
-			}
+            StageSelection(true);
 		}
 
         private void ScheduleGoToLine()
@@ -563,7 +541,7 @@ namespace GitUI
            byte[] patch;
 
            if (_currentItemStaged)
-               patch = PatchManager.GetSelectedLinesAsPatch(Module, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), _currentItemStaged, SelectedDiff.Encoding, _currentItem.IsNew);
+               patch = PatchManager.GetSelectedLinesAsPatch(Module, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), _currentItemStaged, SelectedDiff.Encoding, _currentItem.IsNew, true);
            else
                if (_currentItem.IsNew)
                    patch = PatchManager.GetSelectedLinesAsNewPatch(Module, _currentItem.Name, SelectedDiff.GetText(), SelectedDiff.GetSelectionPosition(), SelectedDiff.GetSelectionLength(), SelectedDiff.Encoding, true);

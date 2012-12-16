@@ -26,7 +26,7 @@ namespace PatchApply
 
             string header;
 
-            ChunkList selectedChunks = ChunkList.GetSelectedChunks(text, selectionPosition, selectionLength, staged, out header);
+            ChunkList selectedChunks = ChunkList.GetSelectedChunks(text, selectionPosition, selectionLength, staged, out header, false);
 
             string body = selectedChunks.ToResetUnstagedLinesPatch();
 
@@ -41,12 +41,12 @@ namespace PatchApply
                 return GetPatchBytes(header, body, fileContentEncoding);
         }
 
-        public static byte[] GetSelectedLinesAsPatch(GitModule module, string text, int selectionPosition, int selectionLength, bool staged, Encoding fileContentEncoding, bool isNewFile)
+        public static byte[] GetSelectedLinesAsPatch(GitModule module, string text, int selectionPosition, int selectionLength, bool staged, Encoding fileContentEncoding, bool isNewFile, bool asHunks)
         {
 
             string header;
 
-            ChunkList selectedChunks = ChunkList.GetSelectedChunks(text, selectionPosition, selectionLength, staged, out header);
+            ChunkList selectedChunks = ChunkList.GetSelectedChunks(text, selectionPosition, selectionLength, staged, out header, asHunks);
 
             if (selectedChunks == null)
                 return null;
@@ -415,7 +415,7 @@ namespace PatchApply
             return int.TryParse(header, out StartLine);
         }
 
-        public static Chunk ParseChunk(string chunkStr, int currentPos, int selectionPosition, int selectionLength)
+        public static Chunk ParseChunk(string chunkStr, int currentPos, int selectionPosition, int selectionLength, bool asHunk)
         {
             string[] lines = chunkStr.Split('\n');
             if (lines.Length < 2)
@@ -440,6 +440,9 @@ namespace PatchApply
                     };
                     //do not refactor, there are no break points condition in VS Experss
                     if (currentPos <= selectionPosition + selectionLength && currentPos + line.Length >= selectionPosition)
+                        patchLine.Selected = true;
+
+                    if (asHunk)
                         patchLine.Selected = true;
 
                     if (line.StartsWith(" "))
@@ -606,7 +609,7 @@ namespace PatchApply
     internal class ChunkList : List<Chunk>
     {
 
-        public static ChunkList GetSelectedChunks(string text, int selectionPosition, int selectionLength, bool staged, out string header)
+        public static ChunkList GetSelectedChunks(string text, int selectionPosition, int selectionLength, bool staged, out string header, bool asHunks)
         {
             header = null;
             //When there is no patch, return nothing
@@ -633,7 +636,7 @@ namespace PatchApply
                 //if selection intersects with chunsk
                 if (currentPos + chunkStr.Length >= selectionPosition)
                 {
-                    Chunk chunk = Chunk.ParseChunk(chunkStr, currentPos, selectionPosition, selectionLength);
+                    Chunk chunk = Chunk.ParseChunk(chunkStr, currentPos, selectionPosition, selectionLength, asHunks);
                     if (chunk != null)
                         selectedChunks.Add(chunk);
                 }
